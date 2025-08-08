@@ -1,4 +1,3 @@
-"""Support Vector Machine classifier implementation with GPU acceleration."""
 from __future__ import annotations
 
 from typing import Dict, Any, Tuple
@@ -11,8 +10,7 @@ from kernels import Kernel
 
 
 class SVM:
-    """Support Vector Machine classifier using Sequential Minimal Optimization (SMO) with GPU acceleration."""
-    
+    """Support Vector Machine classifier using Sequential Minimal Optimization (SMO)"""
     support_vectors: NDArray
     support_labels: NDArray
     support_alphas: NDArray
@@ -22,6 +20,7 @@ class SVM:
     y_tensor: torch.Tensor
     alphas_tensor: torch.Tensor
     errors_tensor: torch.Tensor
+
 
     def __init__(self, kernel: Kernel, C: float, max_iter: int, tolerance: float):
         """
@@ -45,7 +44,11 @@ class SVM:
         self.b: float = 0.0
         self.eps: float = 1e-3  # epsilon for SMO
 
-        if torch.cuda.is_available(): # Untested
+        # Support vectors (computed after training)
+
+        
+        # Device selection - automatically choose best available device
+        if torch.cuda.is_available():
             self.device = torch.device('cuda')
             print(f"Using GPU: {torch.cuda.get_device_name(0)}")
         else:
@@ -53,6 +56,7 @@ class SVM:
             print("Using CPU (GPU not available)")
         
         # Tensor versions of data (will be initialized during fit)
+
         self.m: int = 0
         self.n: int = 0
 
@@ -104,9 +108,8 @@ class SVM:
         self.alphas_tensor = torch.zeros(self.m, dtype=torch.float32, device=self.device)
         self.errors_tensor = torch.zeros(self.m, dtype=torch.float32, device=self.device)
         self.b = 0.0
-
-            
-        # Pre-compute initial errors efficiently
+        
+        # Pre-compute initial errors
         self._initialize_errors()
 
         # Run SMO algorithm
@@ -120,11 +123,15 @@ class SVM:
         self.support_alphas = self.alphas[sv_indices]
 
     def _get_kernel_value(self, i: int, j: int) -> float:
+        """Get kernel value K(x_i, x_j) efficiently."""
         k_val = self.kernel(
             self.X_tensor[i:i+1],
             self.X_tensor[j:j+1]
         )
-        return float(k_val[0, 0].item())
+        if isinstance(k_val, torch.Tensor):
+            return float(k_val[0, 0].item())
+        else:
+            return float(k_val[0, 0])
 
     def _initialize_errors(self) -> None:
         """Initialize error cache efficiently."""
@@ -142,20 +149,15 @@ class SVM:
         # Get kernel values for row i
         k_row = self.kernel(self.X_tensor[i:i+1], self.X_tensor).squeeze(0)
         
-        # Vectorized computation on GPU
+        # Ensure k_row is a tensor
+        if not isinstance(k_row, torch.Tensor):
+            k_row = torch.tensor(k_row, dtype=torch.float32, device=self.device)
+        
         output = torch.sum(self.alphas_tensor[non_zero_mask] * 
                           self.y_tensor[non_zero_mask] * 
                           k_row[non_zero_mask])
         
         return float(output.item() - self.b)
-
-    def _smo_output_batch(self, indices: torch.Tensor) -> torch.Tensor:
-        """Batch compute SVM outputs"""
-        K_subset = self.kernel(self.X_tensor[indices], self.X_tensor)
-        
-        # Vectorized computation: output = K @ (alpha * y) - b
-        output = torch.matmul(K_subset, self.alphas_tensor * self.y_tensor) - self.b
-        return output
 
     def _smo_get_error(self, i1: int) -> float:
         """Get error for example i1."""
@@ -255,30 +257,41 @@ class SVM:
         non_bound_mask = (self.alphas_tensor > 0) & (self.alphas_tensor < self.C)
         
         if non_bound_mask.any():
-            # Vectorized error update on GPU
+            # Get indices as a list to avoid tensor indexing issues
             non_bound_indices = torch.where(non_bound_mask)[0]
             
-            if self.kernel_matrix is not None:
-                # Use pre-computed kernel values
-                k1_values = self.kernel_matrix[i1, non_bound_indices]
-                k2_values = self.kernel_matrix[i2, non_bound_indices]
-            else:
-                # Compute kernel values on-demand
-                k1_values = self.kernel(
+            if len(non_bound_indices) > 0:
+                # Compute kernel values
+                k1_result = self.kernel(
                     self.X_tensor[i1:i1+1], 
                     self.X_tensor[non_bound_indices]
-                ).squeeze(0)
-                k2_values = self.kernel(
+                )
+                k2_result = self.kernel(
                     self.X_tensor[i2:i2+1], 
                     self.X_tensor[non_bound_indices]
-                ).squeeze(0)
-            
-            # Update errors in batch
-            self.errors_tensor[non_bound_indices] += delta1 * k1_values + delta2 * k2_values - delta_b
+                )
+                
+                # Ensure results are tensors
+                if isinstance(k1_result, torch.Tensor):
+                    k1_values = k1_result.squeeze(0).to(self.device)
+                else:
+                    k1_values = torch.tensor(k1_result, dtype=torch.float32, device=self.device).squeeze(0)
+                    
+                if isinstance(k2_result, torch.Tensor):
+                    k2_values = k2_result.squeeze(0).to(self.device)
+                else:
+                    k2_values = torch.tensor(k2_result, dtype=torch.float32, device=self.device).squeeze(0)
+                
+                # Compute error updates
+                error_update = delta1 * k1_values + delta2 * k2_values - delta_b
+                
+                # Update errors using a loop to avoid indexing issues
+                for idx, nb_idx in enumerate(non_bound_indices):
+                    self.errors_tensor[nb_idx] = self.errors_tensor[nb_idx] + error_update[idx]
 
         # Set errors to 0 for the updated alphas
-        self.errors_tensor[i1] = 0
-        self.errors_tensor[i2] = 0
+        self.errors_tensor[i1] = 0.0
+        self.errors_tensor[i2] = 0.0
 
         # Update alphas
         self.alphas_tensor[i1] = a1_new
@@ -302,12 +315,11 @@ class SVM:
         non_bound_indices = self._smo_get_non_bound_indexes()
         
         if len(non_bound_indices) > 1:
-            # Vectorized computation of errors for non-bound examples
-            if len(non_bound_indices) > 0:
-                errors_nb = self.errors_tensor[non_bound_indices]
-                steps = torch.abs(errors_nb - E2)
-                max_idx = torch.argmax(steps)
-                i1 = non_bound_indices[max_idx]
+            # Compute errors for non-bound examples
+            errors_nb = self.errors_tensor[non_bound_indices]
+            steps = torch.abs(errors_nb - E2)
+            max_idx = torch.argmax(steps)
+            i1 = non_bound_indices[max_idx]
 
         if i1 >= 0 and self._smo_take_step(i1, i2):
             return 1
@@ -371,10 +383,8 @@ class SVM:
         sa_tensor = torch.tensor(self.support_alphas, dtype=torch.float32, device=self.device)
         sl_tensor = torch.tensor(self.support_labels, dtype=torch.float32, device=self.device)
         
-        # Compute kernel between test samples and support vectors
         K = self.kernel(X_tensor, sv_tensor)
-        
-        # Ensure K has the right shape
+    
         if K.ndim == 1:
             K = K.reshape(1, -1)
         
