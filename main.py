@@ -142,7 +142,6 @@ def plot_results(classification_results, classification_timings, clustering_metr
     ax.grid(True, alpha=0.3)
     fig.savefig(save_path.joinpath('f1_classification.png'))
 
-
     # Plot 2: Hamming Loss
     fig, ax = plt.subplots()
     hamming_losses = [classification_results[k]['hamming_loss'] for k in kernels]
@@ -169,7 +168,6 @@ def plot_results(classification_results, classification_timings, clustering_metr
         clustering_metrics['silhouette_coefficient'],
         clustering_metrics['davies_bouldin_index']
     ]
-
     colors = ['green', 'red', 'blue']
     bars = plt.bar(metrics_names, metrics_values, alpha=0.8, color=colors)
     ax.set_ylabel('Metric Value')
@@ -204,14 +202,11 @@ def run(dataset_path: str, dataset_type: Type[nx.Graph]) -> None:
     print(f"Dataset: {dataset_path}")
     print(f"Features: {features.shape[1]} (Degree, Clustering, Betweeness")
     print(f"Samples: {features.shape[0]}")
-
     best_kernel = max(classification_results.keys(),
                       key=lambda k: classification_results[k]['macro_f1'])
     print(f"Best SVM kernel: {best_kernel}")
     print(f"Best Macro-F1: {classification_results[best_kernel]['macro_f1']:.4f}")
-
     print(f"Clustering Silhouette Score: {clustering_metrics['silhouette_coefficient']:.4f}")
-
     print("\nEvaluation complete!")
 
 def main() -> None:
