@@ -1,6 +1,6 @@
 # Support Vector Machine
 
-COMP5130 | Data Mining | Undergraduate Group 3 | Final Term Project
+COMP5130: Data Mining | Undergraduate Group 3 | Final Term Project
 
 ## Group Members
 
