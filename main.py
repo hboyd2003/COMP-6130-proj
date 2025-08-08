@@ -57,7 +57,7 @@ def evaluate_svm_classification(X: NDArray, y: NDArray) -> dict[Any, Any]:
     kernels = {
         'Linear': LinearKernel(),
         'RBF': RBFKernel(gamma=0.1),
-        # 'Polynomial': PolynomialKernel(degree=2, gamma=0.1)
+        # 'Polynomial': PolynomialKernel(degree=2, gamma=0.1) # Polynomial Kernel is disabled for final evaluation, but can technically be enabled if desired
     }
 
     results = {}
