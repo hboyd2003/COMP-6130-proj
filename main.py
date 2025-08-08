@@ -133,7 +133,7 @@ def plot_results(classification_results, clustering_metrics, save_path: Path) ->
     ax.legend()
     ax.grid(True, alpha=0.3)
 
-    fig.show()
+    #fig.show()
     fig.savefig(save_path.joinpath('f1_classification.png'))
 
 
@@ -146,7 +146,7 @@ def plot_results(classification_results, clustering_metrics, save_path: Path) ->
     ax.set_title('SVM Hamming Loss (Lower is Better)')
     ax.grid(True, alpha=0.3)
 
-    fig.show()
+    #fig.show()
     fig.savefig(save_path.joinpath('hamming_loss.png'))
 
 
@@ -170,7 +170,7 @@ def plot_results(classification_results, clustering_metrics, save_path: Path) ->
         ax.text(bar.get_x() + bar.get_width()/2., height,
                 f'{value:.3f}', ha='center', va='bottom')
 
-    fig.show()
+    #fig.show()
     fig.savefig(save_path.joinpath('clust_metrics.png'))
 
 
