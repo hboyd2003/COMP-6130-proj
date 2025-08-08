@@ -16,6 +16,7 @@ from graph import Graph, ClassificationMethod
 from kernels import LinearKernel, RBFKernel, PolynomialKernel
 from svm_classifier import SVM
 
+import time
 
 def load_and_preprocess_data(dataset_path: str, dataset_type: Type[nx.Graph], max_nodes: int | None = None) \
         -> Tuple[NDArray, NDArray]:
@@ -60,12 +61,21 @@ def evaluate_svm_classification(X: NDArray, y: NDArray) -> dict[Any, Any]:
     }
 
     results = {}
+    resultTimings = {}
 
     for kernel_name, kernel in kernels.items():
         print(f"\nTesting {kernel_name} kernel...")
+        
+		# Begin timing
+        start_time = time.time()
 
         # Train SVM
         svm = SVM.fit(kernel=kernel, C=1.0, max_iter=500, tolerance=1e-3, X=x_train_scaled, y=y_train)
+
+		# End timing and save duration
+        end_time = time.time()
+        duration = end_time - start_time
+        resultTimings[kernel_name] = duration
 
         # Make predictions
         y_pred = svm.predict(x_test_scaled)
@@ -82,7 +92,7 @@ def evaluate_svm_classification(X: NDArray, y: NDArray) -> dict[Any, Any]:
         print(f"  Hamming Loss: {metrics['hamming_loss']:.4f}")
         print(f"  Support Vectors: {len(svm.support_vectors) if svm.support_vectors is not None else 0}")
 
-    return results
+    return results, resultTimings
 
 
 def evaluate_clustering_performance(X: NDArray, n_clusters: int) -> tuple[dict[str, float], Any]:
@@ -110,7 +120,7 @@ def evaluate_clustering_performance(X: NDArray, n_clusters: int) -> tuple[dict[s
     return metrics, cluster_labels
 
 
-def plot_results(classification_results, clustering_metrics, save_path: Path) -> None:
+def plot_results(classification_results, classification_timings, clustering_metrics, save_path: Path) -> None:
     """Plot evaluation results."""
     print("\n=== Plotting Results ===")
     save_path.mkdir(parents=True, exist_ok=True)
@@ -149,8 +159,18 @@ def plot_results(classification_results, clustering_metrics, save_path: Path) ->
     #fig.show()
     fig.savefig(save_path.joinpath('hamming_loss.png'))
 
+	# Plot 3: Classification Timings
+    fig, ax = plt.subplots()
+    ax.bar(classification_timings.keys(), classification_timings.values(), alpha=0.8, color='purple')
+    ax.set_xlabel('Kernel')
+    ax.set_ylabel('Time (seconds)')
+    ax.set_title('SVM Classification Timings')
+    ax.grid(True, alpha=0.3)
 
-    # Plot 3: Clustering metrics
+    #fig.show()
+    fig.savefig(save_path.joinpath('classification_timings.png'))
+
+    # Plot 4: Clustering metrics
     fig, ax = plt.subplots()
     metrics_names = ['Silhouette\nCoefficient', 'Davies-Bouldin\nIndex']
     metrics_values = [
@@ -174,13 +194,14 @@ def plot_results(classification_results, clustering_metrics, save_path: Path) ->
     fig.savefig(save_path.joinpath('clust_metrics.png'))
 
 
+
 def run(dataset_path: str, dataset_type: Type[nx.Graph]) -> None:
     """Load, train and test a given dataset."""
     # Load and preprocess data
     features, labels = load_and_preprocess_data(dataset_path, dataset_type)
 
     # Evaluate SVM classification
-    classification_results = evaluate_svm_classification(features, labels)
+    classification_results, classification_timings = evaluate_svm_classification(features, labels)
 
     # Evaluate clustering
     clustering_metrics, cluster_labels = evaluate_clustering_performance(features, n_clusters=2)
@@ -188,7 +209,7 @@ def run(dataset_path: str, dataset_type: Type[nx.Graph]) -> None:
     result_dir = Path("results").joinpath(Path(dataset_path).stem)
 
     # Plot results
-    plot_results(classification_results, clustering_metrics, result_dir)
+    plot_results(classification_results, classification_timings, clustering_metrics, result_dir)
 
     # Print summary
     print("\n=== Summary ===")
