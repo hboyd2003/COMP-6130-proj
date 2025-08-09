@@ -37,25 +37,17 @@ class SVM:
         self.tolerance: float = tolerance
         self.max_iter: int = max_iter
 
-        # Label mapping for non-binary labels
-
-
         # SMO algorithm state
         self.b: float = 0.0
         self.eps: float = 1e-3  # epsilon for SMO
-
-        # Support vectors (computed after training)
-
         
-        # Device selection - automatically choose best available device
+        # Device selection
         if torch.cuda.is_available():
             self.device = torch.device('cuda')
             print(f"Using GPU: {torch.cuda.get_device_name(0)}")
         else:
             self.device = torch.device('cpu')
             print("Using CPU (GPU not available)")
-        
-        # Tensor versions of data (will be initialized during fit)
 
         self.m: int = 0
         self.n: int = 0
@@ -63,9 +55,9 @@ class SVM:
     @classmethod
     def fit(cls, kernel: Kernel, C: float, max_iter: int, tolerance: float, X: NDArray, y: NDArray):
         """
-        Fits a new SVM classifier.
+        Fits a new SVM classifier
 
-        :param kernel: Kernel function
+        :param kernel: Instance of Kernel class to use
         :param C: Regularization parameter
         :param max_iter: Maximum number of iterations
         :param tolerance: Tolerance for stopping criterion
@@ -134,19 +126,19 @@ class SVM:
             return float(k_val[0, 0])
 
     def _initialize_errors(self) -> None:
-        """Initialize error cache efficiently."""
+        """Initialize error cache"""
         # When alphas are all 0, output is -b (which is 0 initially), so error = -b - y[i] = -y[i]
         self.errors_tensor = -self.y_tensor.clone()
 
     def _smo_output(self, i: int) -> float:
-        """Compute the SVM output for example i using GPU acceleration."""
+        """Compute the SVM output for example i"""
         # Find non-zero alphas for efficiency
         non_zero_mask = self.alphas_tensor != 0
         
         if not non_zero_mask.any():
             return -self.b
         
-        # Get kernel values for row i
+        # Get kernel values
         k_row = self.kernel(self.X_tensor[i:i+1], self.X_tensor).squeeze(0)
         
         # Ensure k_row is a tensor
